@@ -10,6 +10,7 @@ dev = ["pytest>=8", "pyright>=1.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-q"
 
 [tool.pyright]
