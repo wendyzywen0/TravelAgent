@@ -7,8 +7,11 @@ prices. There is no conversation; if something is missing, you re-send a fuller 
 
 ## Quick start
 
+You need Python 3.12+ and [uv](https://docs.astral.sh/uv/getting-started/installation/)
+(`curl -LsSf https://astral.sh/uv/install.sh | sh`). Then:
+
 ```bash
-git clone <repo-url>
+git clone https://github.com/wendyzywen0/TravelAgent.git
 cd TravelAgent
 uv sync
 export ANTHROPIC_API_KEY=sk-ant-...
@@ -41,11 +44,9 @@ traces are JSON files under `traces/` (git-ignored).
 
 ## Example output
 
-What you'll see depends on what you type. Below are two shapes: one where the agent has to ask
-for more, one where it has enough to answer. The lead replaces these placeholders with real
-output after a live run.
+Two shapes, both real output from `claude-opus-4-8`: one where the agent has to ask for more,
+one where it has enough to answer.
 
-<!-- REAL OUTPUT: needs_info -->
 ```json
 {
   "status": "needs_info",
@@ -62,7 +63,6 @@ output after a live run.
 ```
 (Input: `"Cheap."` — nothing to go on, so the agent asks everything at once instead of guessing.)
 
-<!-- REAL OUTPUT: ok -->
 ```json
 {
   "status": "ok",
@@ -217,7 +217,6 @@ Each of the six live cases is scored on three dimensions:
 | 5 | Lisbon Oct 10-13 plus 5 days nearby, flight already booked | `ok`; `estimate_flights` never called; suggestion stays near Lisbon |
 | 6 | Tokyo, 8 days in November, $6k excluding flights | `ok`; budget breakdown has no flight line; nights = 8; total ≤ $6000 |
 
-<!-- REAL EVAL TABLE -->
 Real run on 2026-10-08, `claude-opus-4-8` for agent and judge:
 
 ```text
@@ -238,8 +237,6 @@ Total tokens (agent + judge): 110681 in / 10059 out
 Estimated cost (agent + judge): $0.8049
 Project ledger total: $3.4835
 ```
-
-*(Lead fills in actual scores and trace links per case after the real eval run.)*
 
 
 ### Stage-by-stage review page
@@ -295,8 +292,9 @@ Known limits:
 trip_agent/
   __init__.py      # re-exports suggest_trip()
   __main__.py       # CLI entry point, --verbose, prints trace path
-  agent.py          # orchestration: extract -> gate -> tool loop -> guards -> trace
-  config.py         # model names, loop cap, API key loading
+  agent.py          # orchestration: extract -> gate -> tool loop -> cross-check -> repair/graceful -> trace
+  prompts.py        # system prompts, repair message, customer-facing fallback wording
+  config.py         # model names, loop cap, API key loading, price table
   gate.py           # must-have rules and inference (SPEC §5.3)
   guards.py         # input checks and the dollar-figure cross-check
   ledger.py         # cost ledger and the $10 project cap
@@ -308,8 +306,10 @@ trip_agent/
 evals/
   __init__.py
   cases.py          # the six eval cases and their behavior checks
-  run.py            # eval runner: structure/behavior/fit scoring, report
+  run.py            # eval runner: structure/behavior/fit scoring, report, results/<run>.json
   judge.py          # the LLM-judge prompt and call
+  build_review.py   # builds review/loop-review.html from the newest results file
+  review/           # the stage-by-stage review page and its template
 
 tests/
   conftest.py        # keeps tests key-free
@@ -317,4 +317,11 @@ tests/
   test_models.py      # schema validation (ok/needs_info consistency)
   test_tools.py        # mock tool behavior (exclusions, nightly cap, budget math)
   test_guards.py        # input limits and the dollar-figure cross-check
+  test_trace.py         # trace file shape
+  test_ledger.py        # cost ledger and cap
+  test_agent_fake.py    # the whole loop with a scripted fake model: needs_info, ok, repair, loop cap
+  test_eval_cases.py    # the eval behavior checks against hand-built responses
 ```
+
+Planning documents: `SPEC.md` (what was agreed), `DECISIONS.md` (why), `PLAN.md` (build order),
+`HANDOFF.md` (status and what is next).
