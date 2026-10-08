@@ -77,6 +77,7 @@ def judge(
     tool_calls: list[dict[str, Any]],
     client: Any = None,
     usage_out: dict[str, Any] | None = None,
+    io_out: dict[str, Any] | None = None,
 ) -> JudgeScore:
     """Score Fit for one eval case's result.
 
@@ -88,12 +89,13 @@ def judge(
     if client is None:
         client = anthropic.Anthropic(api_key=config.load_api_key())
 
+    user_message = _build_user_message(case, resp, tool_calls)
     t0 = time.monotonic()
     message = client.messages.parse(
         model=config.JUDGE_MODEL,
         max_tokens=1500,
         system=JUDGE_SYSTEM,
-        messages=[{"role": "user", "content": _build_user_message(case, resp, tool_calls)}],
+        messages=[{"role": "user", "content": user_message}],
         thinking={"type": "adaptive"},
         output_config={"effort": "low"},
         output_format=JudgeScore,
@@ -111,6 +113,14 @@ def judge(
         })
 
     score = message.parsed_output
+    if io_out is not None:
+        blocks = []
+        for b in getattr(message, "content", None) or []:
+            t = getattr(b, "type", None)
+            blocks.append({"type": "text", "text": getattr(b, "text", "")} if t == "text" else {"type": str(t), "omitted": True})
+        io_out.update({"purpose": f"judge case {case.id}", "system": JUDGE_SYSTEM, "sent": [{"role": "user", "content": user_message}],
+                       "stop_reason": getattr(message, "stop_reason", None), "response": blocks,
+                       "parsed": score.model_dump(mode="json") if score is not None else None})
     if score is None:
         raise RuntimeError(f"Judge produced no JudgeScore (stop_reason={message.stop_reason}).")
     return score

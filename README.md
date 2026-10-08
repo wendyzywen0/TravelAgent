@@ -220,6 +220,18 @@ Project ledger total: $3.4835
 *(Lead fills in actual scores and trace links per case after the real eval run.)*
 
 
+### Stage-by-stage review page
+
+[`evals/review/loop-review.html`](evals/review/loop-review.html) walks through every eval case:
+request, extracted fields, gate decision, each model turn with the raw system prompt, messages sent,
+and response blocks, every tool call with arguments and results, the final answer, and the judge's
+score with its rationale and raw prompt. Open the file in a browser. Rebuild it from the newest
+eval run with:
+
+```bash
+uv run python -m evals.build_review
+```
+
 ## What the traces say about the loop
 
 In every `ok` eval run the model used the same four loop turns: `search_destinations`, then

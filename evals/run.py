@@ -79,6 +79,7 @@ def run_case(case: EvalCase, run_judge: bool) -> dict[str, Any]:
         "trace_path": None,
         "usage": [],
         "judge_usage": None,
+        "judge_io": None,
         "error": None,
     }
 
@@ -117,7 +118,9 @@ def run_case(case: EvalCase, run_judge: bool) -> dict[str, Any]:
     if run_judge:
         try:
             judge_usage: dict[str, Any] = {}
-            score = judge_fn(case, resp, tool_calls, usage_out=judge_usage)
+            judge_io: dict[str, Any] = {}
+            score = judge_fn(case, resp, tool_calls, usage_out=judge_usage, io_out=judge_io)
+            result["judge_io"] = judge_io or None
             result["fit"] = score.score
             result["fit_rationale"] = score.rationale
             if judge_usage:

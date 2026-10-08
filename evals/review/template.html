@@ -1,0 +1,143 @@
+<title>TravelAgent Loop Review</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--paper:#f4f6f8;--card:#ffffff;--ink:#1c2430;--muted:#5b6573;--line:#d9dee5;--accent:#0f6f8f;--accent-soft:#e3f1f6;
+--pass:#15803d;--pass-soft:#e4f3e8;--warn:#b45309;--warn-soft:#fbeedc;--fail:#b91c1c;--fail-soft:#fbe4e4;--code:#eef1f4;
+--sans:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#141920;--card:#1b222b;--ink:#e6eaef;--muted:#9aa5b3;--line:#2c3642;--accent:#5fb3d0;--accent-soft:#1a2f3a;
+--pass:#5ccf7f;--pass-soft:#163322;--warn:#f0a94b;--warn-soft:#3a2a12;--fail:#f07c7c;--fail-soft:#3a1a1a;--code:#232c37}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#141920;--card:#1b222b;--ink:#e6eaef;--muted:#9aa5b3;--line:#2c3642;--accent:#5fb3d0;--accent-soft:#1a2f3a;
+--pass:#5ccf7f;--pass-soft:#163322;--warn:#f0a94b;--warn-soft:#3a2a12;--fail:#f07c7c;--fail-soft:#3a1a1a;--code:#232c37}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:24px 64px}
+.wrap{max-width:1040px;margin:0 auto}
+h1{font-size:22px;font-weight:600;margin:0 0 4px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 20px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:28px}
+.chip{display:block;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:inherit;text-decoration:none}
+.chip:hover{border-color:var(--accent)}
+.chip .n{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.chip .t{font-weight:500;margin:2px 0 6px;font-size:13px}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:999px;background:var(--code);color:var(--muted)}
+.pill.pass{background:var(--pass-soft);color:var(--pass)}.pill.fail{background:var(--fail-soft);color:var(--fail)}.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.acc{background:var(--accent-soft);color:var(--accent)}
+section.case{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:22px;overflow:hidden}
+.case>header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;padding:14px 18px;border-bottom:1px solid var(--line)}
+.case>header h2{font-size:16px;font-weight:600;margin:0}
+.stage{display:grid;grid-template-columns:120px 1fr;gap:0 16px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.stage:last-child{border-bottom:0}
+.stage .lab{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);padding-top:3px}
+.stage .lab small{display:block;color:var(--muted);letter-spacing:0;text-transform:none;font-size:11px;margin-top:2px}
+.req{font-size:15px;font-style:italic}
+dl.kv{display:grid;grid-template-columns:max-content 1fr;gap:2px 14px;margin:0;font-family:var(--mono);font-size:12.5px}
+dl.kv dt{color:var(--muted)}dl.kv dd{margin:0;word-break:break-word}
+ul.plain{margin:0;padding-left:18px}ul.plain li{margin:2px 0}
+.turn{border-left:3px solid var(--line);padding:6px 0 6px 12px;margin:6px 0}
+.turn.model{border-left-color:var(--accent)}
+.turn .hd{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-family:var(--mono);font-size:12px}
+.turn .hd b{font-weight:500;color:var(--ink)}
+.tool{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+@media (max-width:640px){.tool{grid-template-columns:1fr}.stage{grid-template-columns:1fr}.stage .lab{padding-bottom:4px}}
+.tool .box{background:var(--code);border-radius:6px;padding:8px 10px;min-width:0}
+.tool .box .cap{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}
+pre{margin:0;font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}
+details>summary{cursor:pointer;color:var(--accent);font-family:var(--mono);font-size:12px;list-style:none}
+details>summary::before{content:"▸ "}details[open]>summary::before{content:"▾ "}
+.dest{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:6px 0}
+.dest .name{font-weight:600}
+.dest .why{color:var(--muted);margin:2px 0 6px}
+.money{font-family:var(--mono);font-size:12.5px;display:flex;gap:14px;flex-wrap:wrap}
+.judge{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start}
+.score{font-family:var(--mono);font-size:28px;font-weight:500;line-height:1;padding:6px 10px;border-radius:8px;background:var(--accent-soft);color:var(--accent)}
+.note{color:var(--muted);font-size:12.5px}
+.flag{background:var(--warn-soft);color:var(--warn);border-radius:6px;padding:6px 10px;font-size:12.5px;margin-top:8px}
+.tot{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.io{margin-top:6px}.iogrid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:6px}.iogrid .box{background:var(--code);border-radius:6px;padding:8px 10px}.iogrid .cap{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}pre.sys{max-height:320px}
+</style>
+<div class="wrap">
+<h1>Loop review: six eval cases, stage by stage</h1>
+<p class="sub">Final eval run, 2026-10-08, agent and judge on claude-opus-4-8. Each case shows the request, the extracted fields, the gate decision, every model turn and tool call in time order, the final response, and the judge verdict. Open any raw block for the exact JSON the model saw, and each turn's “raw model interaction” for the system prompt, the messages sent, and the model's response blocks.</p>
+<nav class="strip" id="strip"></nav>
+<div id="cases"></div>
+</div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const j = o => esc(JSON.stringify(o, null, 1).replace(/\n\s*/g, ' ').replace(/\{ /g,'{').replace(/ \}/g,'}').replace(/\[ /g,'[').replace(/ \]/g,']'));
+const jj = o => esc(JSON.stringify(o, null, 2));
+const usd = n => n==null ? '–' : '$' + Number(n).toLocaleString('en-US',{maximumFractionDigits:0});
+const pill = (txt, cls='') => `<span class="pill ${cls}">${esc(txt)}</span>`;
+
+function summarizeResult(name, r, err){
+  if (err) return `error: ${esc(err)}`;
+  if (name==='search_destinations') return (r||[]).map(d=>`${d.name} (${d.country}, L${d.price_level}, ~${usd(d.typical_nightly_usd)}/n)`).join(' · ') || 'no candidates';
+  if (name==='estimate_flights') return r && r.round_trip_per_person_usd!=null ? `${r.origin}→${r.destination}: ${usd(r.round_trip_per_person_usd)} pp round trip, ${r.hours}h` : j(r);
+  if (name==='find_hotels') return (r||[]).map(h=>`${h.name} ${usd(h.nightly_usd)}/n [${(h.tags||[]).join(',')}]`).join(' · ') || 'no hotels under constraints';
+  if (name==='compute_budget') return r ? `total ${usd(r.total_usd)} = ${Object.entries(r.breakdown||{}).map(([k,v])=>`${k} ${usd(v)}`).join(' + ')} · fits: ${r.fits} · over by ${usd(r.over_by_usd)}` : j(r);
+  return j(r);
+}
+function summarizeArgs(name, a){
+  return Object.entries(a||{}).filter(([k,v])=>v!==null && !(Array.isArray(v)&&!v.length)).map(([k,v])=>`${k}=${Array.isArray(v)?v.join('|'):v}`).join('  ');
+}
+function ioHtml(io, label){
+  if(!io) return '';
+  const sent = (io.sent||[]).map(m=>`<div class="box"><div class="cap">sent · ${esc(m.role)}</div><pre>${typeof m.content==='string'?esc(m.content):jj(m.content)}</pre></div>`).join('');
+  const resp = (io.response||[]).map(b=>b.type==='text'?`<div class="box"><div class="cap">response · text</div><pre>${esc(b.text)}</pre></div>`
+    : b.type==='tool_use'?`<div class="box"><div class="cap">response · tool_use ${esc(b.name)}</div><pre>${jj(b.input)}</pre></div>`
+    : `<div class="box"><div class="cap">response · ${esc(b.type)}</div><pre>${b.omitted?'[thinking happened; text not returned by the API]':jj(b)}</pre></div>`).join('');
+  const parsed = io.parsed?`<div class="box"><div class="cap">parsed output</div><pre>${jj(io.parsed)}</pre></div>`:'';
+  const tools = io.tools?`<div class="box"><div class="cap">tools offered</div><pre>${esc(io.tools.join(', '))}</pre></div>`:'';
+  return `<details class="io"><summary>${esc(label||'raw model interaction')} · stop_reason=${esc(io.stop_reason||'?')}</summary>
+    <details><summary>system prompt (${(io.system||'').length} chars)</summary><pre class="sys">${esc(io.system||'')}</pre></details>
+    <div class="iogrid">${tools}${sent}${resp}${parsed}</div></details>`;
+}
+function loopHtml(c){
+  const ios = c.model_io||[]; const items = [...c.model_calls.map(m=>({...m,_k:'model',_io: ios.find(x=>m.purpose.startsWith(x.purpose))})), ...c.tool_calls.map(t=>({...t,_k:'tool'}))].sort((a,b)=>a.t-b.t);
+  if (!items.length) return '<p class="note">No model calls recorded.</p>';
+  return items.map(it=>{
+    if (it._k==='model') return `<div class="turn model"><div class="hd"><b>${esc(it.purpose)}</b>${pill(`${it.input_tokens} in / ${it.output_tokens} out`)}${pill(`${(it.duration_s||0).toFixed(1)}s`)}${it.stop_reason?pill(it.stop_reason):''}</div>${ioHtml(it._io)}</div>`;
+    const bad = it.error ? 'fail' : '';
+    return `<div class="turn"><div class="hd"><b>${esc(it.name)}</b>${pill(`t+${it.t.toFixed(1)}s`)}${it.error?pill('error','fail'):''}</div>
+      <div class="tool"><div class="box"><div class="cap">arguments</div><div style="font-family:var(--mono);font-size:12px">${esc(summarizeArgs(it.name,it.args))||'<i>none</i>'}</div>${it.raw_args?`<div class="flag">raw args differed: ${j(it.raw_args)}</div>`:''}</div>
+      <div class="box"><div class="cap">result</div><div style="font-family:var(--mono);font-size:12px">${summarizeResult(it.name,it.result,it.error)}</div><details><summary>raw</summary><pre>${jj(it.error?{error:it.error}:it.result)}</pre></details></div></div></div>`;
+  }).join('');
+}
+function finalHtml(c){
+  const f=c.final; if(!f) return '<p class="note">No final response (see errors).</p>';
+  let h = `<div class="pills" style="margin-bottom:8px">${pill(f.status, f.status===c.expected?'pass':'fail')}</div>`;
+  if (f.status==='needs_info') h += `<ul class="plain">${f.questions.map(q=>`<li>${esc(q)}</li>`).join('')}</ul>`;
+  else {
+    const s=f.suggestion;
+    h += s.destinations.map(d=>`<div class="dest"><div class="name">${esc(d.name)}, ${esc(d.country)}</div><div class="why">${esc(d.why)}</div>
+      <div class="money"><span>hotel: ${d.hotel?esc(d.hotel.name)+' '+usd(d.hotel.nightly_usd)+'/n':'–'}</span><span>flight pp: ${usd(d.flight_estimate_usd)}</span><span>total: ${usd(d.estimated_total_usd)}</span></div></div>`).join('');
+    if (s.budget) h += `<div class="money" style="margin-top:8px"><span>headline total ${usd(s.budget.total_usd)}</span><span>user budget ${usd(s.budget.user_budget_usd)}</span><span>fits: ${s.budget.fits}</span><span>${Object.entries(s.budget.breakdown||{}).map(([k,v])=>k+' '+usd(v)).join(' + ')}</span></div>`;
+    h += `<details style="margin-top:8px"><summary>reasoning</summary><p style="margin:6px 0">${esc(s.reasoning)}</p></details>`;
+    h += `<details><summary>caveats (${s.caveats.length})</summary><ul class="plain">${s.caveats.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details>`;
+  }
+  if (f.assumptions&&f.assumptions.length) h += `<details><summary>assumptions carried (${f.assumptions.length})</summary><ul class="plain">${f.assumptions.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></details>`;
+  h += `<details><summary>raw response</summary><pre>${jj(f)}</pre></details>`;
+  return h;
+}
+function caseHtml(c){
+  const ex = Object.entries(c.extraction).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(Array.isArray(v)?v.join(', '):v)}</dd>`).join('');
+  const g=c.gate;
+  const gateBody = g.ok ? `<div class="pills">${pill('passed gate','pass')}</div>` : `<div class="pills">${pill('needs_info','warn')}</div><p style="margin:6px 0 0">Missing: <b>${esc((g.missing||[]).join(', '))}</b></p>`;
+  const assum = (g.assumptions||[]).length ? `<p style="margin:6px 0 0">Assumed:</p><ul class="plain">${g.assumptions.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>` : '<p class="note" style="margin:6px 0 0">No assumptions made.</p>';
+  const tot=c.totals||{};
+  return `<section class="case" id="case-${c.id}"><header><h2>${c.id}. ${esc(c.name)}</h2>
+    <div class="pills">${pill('structure '+(c.structure?'pass':'fail'), c.structure?'pass':'fail')}${pill('behavior '+c.behavior, c.failed.length?'fail':'pass')}${pill('fit '+c.fit+'/5', c.fit>=4?'pass':'warn')}${pill(`${tot.model_calls||c.model_calls.length} model calls · ${tot.tool_calls||c.tool_calls.length} tool calls`)}${pill(`${tot.input_tokens||0} in / ${tot.output_tokens||0} out`)}</div>
+    ${c.failed.length?`<div class="flag">failed checks: ${esc(c.failed.join('; '))}</div>`:''}</header>
+    <div class="stage"><div class="lab">Request</div><div class="req">“${esc(c.input)}”</div></div>
+    <div class="stage"><div class="lab">Extracted<small>call 1, non-empty fields</small></div><div><dl class="kv">${ex}</dl>${ioHtml((c.model_io||[]).find(x=>x.purpose==='extraction'),'raw model interaction (extraction)')}</div></div>
+    <div class="stage"><div class="lab">Gate<small>python rules</small></div><div>${gateBody}${assum}</div></div>
+    <div class="stage"><div class="lab">Loop<small>turns and tools in time order</small></div><div>${loopHtml(c)}</div></div>
+    <div class="stage"><div class="lab">Final</div><div>${finalHtml(c)}</div></div>
+    <div class="stage"><div class="lab">Judge<small>fit, 1–5</small></div><div class="judge"><div class="score">${c.fit}</div><div>${esc(c.rationale||'')}${ioHtml(c.judge_io,'raw model interaction (judge)')}</div></div></div>
+    ${c.errors.length?`<div class="stage"><div class="lab">Errors</div><div><pre>${jj(c.errors)}</pre></div></div>`:''}
+    <div class="stage"><div class="lab">Trace</div><div class="tot">${esc(c.trace)}</div></div>
+  </section>`;
+}
+document.getElementById('strip').innerHTML = D.map(c=>`<a class="chip" href="#case-${c.id}"><div class="n">case ${c.id}</div><div class="t">${esc(c.name)}</div><div class="pills">${pill(c.final?c.final.status:'error', c.final&&c.final.status===c.expected?'pass':'fail')}${pill(c.behavior, c.failed.length?'fail':'pass')}${pill('fit '+c.fit, c.fit>=4?'pass':'warn')}</div></a>`).join('');
+document.getElementById('cases').innerHTML = D.map(caseHtml).join('');
+</script>

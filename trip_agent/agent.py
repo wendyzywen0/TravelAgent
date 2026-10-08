@@ -143,6 +143,9 @@ def _extract(text: str, client: Any, tracer: Tracer) -> TripRequest:
     )
     _usage(tracer, msg, time.monotonic() - t0, f"extraction (effort={EXTRACTION_EFFORT})")
     parsed = msg.parsed_output
+    _record_io(tracer, "extraction", prompts.EXTRACTION_SYSTEM,
+               [{"role": "user", "content": prompts.extraction_user_message(text, date.today())}], msg,
+               {"parsed": parsed.model_dump(mode="json") if parsed is not None else None})
     if parsed is None:
         tracer.event("error", reason="extraction", stop_reason=msg.stop_reason)
         raise AgentError(f"Extraction produced no TripRequest (stop_reason={msg.stop_reason}).")
@@ -169,6 +172,8 @@ def _tool_loop(req: TripRequest, assumptions: list[str], client: Any, tracer: Tr
             output_config={"effort": LOOP_EFFORT},
         )
         _usage(tracer, msg, time.monotonic() - t0, f"loop turn {turn} (effort={LOOP_EFFORT})")
+        _record_io(tracer, f"loop turn {turn}", prompts.LOOP_SYSTEM, [messages[-1]], msg,
+                   {"tools": [t["name"] for t in specs]} if turn == 1 else None)
         messages.append({"role": "assistant", "content": msg.content})
 
         if msg.stop_reason in ("max_tokens", "refusal"):
@@ -269,6 +274,28 @@ def _result(tool_use_id: str, content: str, error: bool = False) -> dict[str, An
     if error:
         block["is_error"] = True
     return block
+
+
+def _blocks(content: Any) -> list[dict[str, Any]]:
+    """Serialize response content blocks for the trace (thinking text is never returned by the API)."""
+    out: list[dict[str, Any]] = []
+    for b in content or []:
+        t = getattr(b, "type", None)
+        if t == "text":
+            out.append({"type": "text", "text": getattr(b, "text", "")})
+        elif t == "tool_use":
+            out.append({"type": "tool_use", "name": getattr(b, "name", ""), "input": getattr(b, "input", {})})
+        elif t in ("thinking", "redacted_thinking"):
+            out.append({"type": "thinking", "omitted": True})
+        else:
+            out.append({"type": str(t)})
+    return out
+
+
+def _record_io(tracer: Tracer, purpose: str, system: str, sent: list[dict[str, Any]], msg: Any, extra: dict[str, Any] | None = None) -> None:
+    """One model_io event per call: the system prompt, the NEW messages sent this call, and the raw response blocks."""
+    tracer.event("model_io", purpose=purpose, system=system, sent=sent, stop_reason=getattr(msg, "stop_reason", None),
+                 response=_blocks(getattr(msg, "content", None)), **(extra or {}))
 
 
 def _usage(tracer: Tracer, msg: Any, duration_s: float, purpose: str) -> None:
