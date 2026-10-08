@@ -20,6 +20,8 @@ uv.lock.bak
 
 # eval outputs / scratch
 evals/results/
+traces/
+cost_ledger.json
 *.log
 
 # OS / editor

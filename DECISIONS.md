@@ -74,3 +74,8 @@ Time plan: ~55 min build, ~10 min live demo + eval run, last 25 min verification
 - "Long weekend" ⇒ 3 nights, "spring break" ⇒ 7 nights, assumed with a caveat.
 - Headcount inference: "I'll be" / "I'm" ⇒ 1 adult; "we" / "anniversary" / "couple" ⇒ 2 adults. Always with a caveat.
 - Still open: default daily spend for the budget tool (see SPEC.md §8 Q2).
+
+## D9. Budget scope, guardrails, tracing
+- Budget = flights + accommodation only. Food, activities, ground transport excluded from the initial scope and stated in a caveat. `compute_budget` has no daily-spend input.
+- Basic guardrails in Python: input length check, user text kept out of the system prompt, 6-turn loop cap, pydantic validation of tool arguments, every dollar figure in the response re-checked against tool results, off-topic requests get `needs_info`, cost ledger with a $10 project cap.
+- Tracing: one JSON trace per request under `traces/` (git-ignored) with input, extraction, gate decision, tool calls, model usage, and final output. CLI prints the trace path; eval report links each case to its trace.

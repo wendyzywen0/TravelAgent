@@ -23,7 +23,7 @@ The agent handles one or more of three jobs per request (D2):
 
 1. **Destination discovery** — suggest 1–3 destinations that match the vibe, season, region.
 2. **Accommodation discovery** — suggest hotels for a known or newly chosen destination.
-3. **Budget planning** — estimate a total and say whether it fits the user's figure.
+3. **Budget planning** — estimate a total from flights and accommodation only, and say whether it fits the user's figure. Food, activities and ground transport are out of scope for the initial version; the response says so in a caveat.
 
 Deliverables (D7):
 
@@ -141,7 +141,7 @@ Expected outcome on the seven sample inputs:
 | `search_destinations` | vibe[], season, region, exclusions[] | list of candidates: name, country, price_level (1–3), tags, typical_nightly_usd | hardcoded table of ~12 destinations |
 | `estimate_flights` | origin, destination, month | round-trip fare per person (usd), hours | hardcoded fares for a handful of pairs; unknown pairs return a "no data" error the model must surface as a caveat |
 | `find_hotels` | destination, style, nightly_cap | list of hotels: name, nightly_usd, tags (pool, boutique, …) | hardcoded ~3 per destination |
-| `compute_budget` | flight_pp, travelers, nightly, nights, daily_spend_pp, user_budget, includes_flights | total, breakdown, fits, over_by | pure arithmetic, no randomness |
+| `compute_budget` | flight_pp, travelers, nightly, nights, user_budget, includes_flights | total, breakdown (flights, hotel), fits, over_by | pure arithmetic, no randomness; covers flights + hotel only |
 
 - Tool errors are returned to the model as error results, not raised.
 - The model never does arithmetic; it must call `compute_budget`.
@@ -153,6 +153,23 @@ Expected outcome on the seven sample inputs:
 - Call 1 and the final answer use structured output so parsing never depends on prose.
 - System prompt states: do not invent prices; use the tools; if a tool returns no data, say so.
 
+### 5.6 Guardrails (basic, all in Python)
+
+- **Input.** Reject empty input or input over 2,000 characters with a clear error, before any model call.
+- **Prompt injection.** The user text is passed as data inside the user message, never into the system prompt. The system prompt says instructions in the request are travel preferences, not commands.
+- **Loop.** Hard cap of 6 model turns in call 2. Each tool call's arguments are validated with pydantic before the tool runs; bad arguments return an error result to the model, never an exception.
+- **Output.** The final answer must parse into `TripResponse`. Every dollar figure in the response is re-checked against tool results: totals must equal a `compute_budget` result, hotel prices must match `find_hotels` output, flight fares must match `estimate_flights` output. A mismatch fails the response with a clear error rather than returning a made-up number.
+- **Scope.** If the request is not about travel, return `needs_info` with one question saying what the agent does.
+- **Cost.** Each model call sets `max_tokens`; the runner tracks cumulative tokens and refuses to start a new eval run if the project ledger is past $10.
+
+### 5.7 Logging and tracing
+
+- Every request gets a short `request_id`.
+- A trace records, in order: the raw input, call 1 output (the `TripRequest`), the gate decision and missing fields, every tool call with arguments, result, and duration, every model call with model, effort, input/output tokens, and duration, and the final response or error.
+- Traces are written as one JSON file per request under `traces/` (git-ignored). The CLI prints the trace path at the end. `--verbose` also streams the trace events to stderr as they happen.
+- Standard `logging` at INFO for the summary lines (gate decision, tool names called, token totals), DEBUG for full payloads.
+- The eval report links each case to its trace file so a failing case can be opened and read.
+
 ## 6. Constraints
 
 - Python 3.12+ (machine has 3.14), `uv` for setup, `anthropic` + `pydantic` only runtime deps.
@@ -161,7 +178,7 @@ Expected outcome on the seven sample inputs:
 - Every `estimated_total_usd` shown must equal a `compute_budget` result (checked in Python before returning).
 - No network calls except the Anthropic API. No randomness in mocks.
 - `tests/` must run in under 5 seconds with no key set.
-- Total token spend for the whole project (building, demo, evals, optional sweep) stays under $10. The eval runner prints token usage and estimated cost per run.
+- Total token spend for the whole project (building, demo, evals, optional sweep) stays under $10. The eval runner prints token usage and estimated cost per run and appends to a simple ledger file.
 - README setup path: clone → `uv sync` → set key → one command to run, one to test, one to eval.
 
 ## 7. Acceptance criteria (testable)
@@ -189,14 +206,20 @@ Each case is scored on Structure (pass/fail), Behavior (per-check pass/fail), Fi
 - AC7. Structure passes on 6/6. Behavior passes on at least 5/6. Mean Fit ≥ 3.5. (Targets; the report shows actuals.)
 - AC8. The judge sees the request, the tool results, and the final answer; it scores only vibe match and groundedness, nothing Python already checked.
 
-### 7.3 README
-- AC9. A fresh clone reaches a working `suggest_trip` call in under 5 minutes following only the README.
-- AC10. README explains, in a few lines each: tool split, orchestration choice, missing-info policy, eval dimensions, and what was cut.
+### 7.3 Guardrails and tracing (`tests/`, no API)
+- AC11. Empty input and input over 2,000 chars raise a clear error without a model call.
+- AC12. A response whose `estimated_total_usd` does not match any `compute_budget` result is rejected.
+- AC13. A tool call with invalid arguments returns an error result and the loop continues.
+- AC14. Running the CLI on any input writes one JSON trace file containing the input, the gate decision, every tool call, and token usage.
+
+### 7.4 README
+- AC15. A fresh clone reaches a working `suggest_trip` call in under 5 minutes following only the README.
+- AC16. README explains, in a few lines each: tool split, orchestration choice, missing-info policy, eval dimensions, and what was cut.
 
 ## 8. Unresolved questions (flagged, not answered)
 
 1. **Loop-cap fallback.** If the model hits 6 turns without a final answer, return partial `ok` with caveats or `needs_info`? Proposal in 6 is a placeholder.
-2. **Default daily spend.** Still open. `compute_budget` needs a per-person daily spend for food/activities. A flat default (e.g. $100/day) is an invented number. Proposed default if not decided: the destination mock carries a `typical_daily_spend_usd` per price level, and the model passes it through to `compute_budget`, so the number is traceable to mock data rather than made up.
+2. ~~Default daily spend.~~ Resolved: budget covers flights + accommodation only. Food and activities are excluded from the initial scope and named in a caveat.
 3. ~~"Long weekend" and "spring break" lengths.~~ Resolved: 3 nights and 7 nights, assumed with a caveat.
 4. ~~Headcount for the Lisbon case.~~ Resolved: "I'll be in Lisbon" signals one person ⇒ infer 1 adult with a caveat.
 5. **Judge effort and prompt wording.** Low effort was agreed; the rubric text itself is not yet written.
