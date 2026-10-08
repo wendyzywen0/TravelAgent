@@ -196,7 +196,46 @@ Each of the six live cases is scored on three dimensions:
 | 6 | Tokyo, 8 days in November, $6k excluding flights | `ok`; budget breakdown has no flight line; nights = 8; total ≤ $6000 |
 
 <!-- REAL EVAL TABLE -->
+Real run on 2026-10-08, `claude-opus-4-8` for agent and judge:
+
+```text
+id  name                                                     structure  behavior  fit  tokens in/out  trace
+--  -------------------------------------------------------  ---------  --------  ---  -------------  ----------------------------------------------------------------------------
+1   Cheap. (needs everything)                                pass       4/4       5    3817/329       traces/20261008T213723393123_c4151fc1.json
+2   Beach week, no headcount                                 pass       2/2       4    3868/384       traces/20261008T213729651855_d7254078.json
+3   Beach week for two, under $2000                          pass       3/3       5    28594/2888     traces/20261008T213804829966_99763211.json
+4   Europe long weekend from SFO, boutique under $300/night  pass       2/2       5    28652/2721     traces/20261008T213837072802_b69dda95.json
+5   Lisbon add-on, flight already booked                     pass       3/3       5    27571/2313     traces/20261008T213908035062_923b30ad.json
+6   Tokyo, 8 days, $6k excluding flights                     pass       3/3       4    18179/1424     traces/20261008T213928767232_2072b131.json
+
+Structure pass rate: 6/6 (100%)
+Behavior pass rate (all checks): 6/6 (100%)
+Mean fit: 4.67
+
+Total tokens (agent + judge): 110681 in / 10059 out
+Estimated cost (agent + judge): $0.8049
+Project ledger total: $3.4835
+```
+
 *(Lead fills in actual scores and trace links per case after the real eval run.)*
+
+
+## What the traces say about the loop
+
+In every `ok` eval run the model used the same four loop turns: `search_destinations`, then
+`estimate_flights` and `find_hotels` for each candidate, then `compute_budget` per candidate, then
+`final_answer`. That is exactly the order a fixed pipeline would use. With four fixed tools the loop
+is not making decisions; it is adding two to four model turns of latency and cost. The honest
+production choice is a Python fan-out of all tool calls plus one model call to pick and explain,
+keeping a bounded loop only for constraint relaxation (for example, a family budget that only fits at
+5 nights instead of 7). The loop stays in this submission because the brief asks to see orchestration
+choices defended; measuring both modes is tracked in issue #11.
+
+## Future work (out of scope for the 2-hour build)
+
+- #11 Agent loop vs fixed pipeline: measure both on the same eval, then pick.
+- #12 Model comparison: find the smallest model that meets the quality bar.
+- #13 Wider eval set: adversarial, ambiguous, and budget-relaxation cases.
 
 ## What was cut, and known limits
 
