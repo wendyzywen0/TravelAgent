@@ -17,7 +17,13 @@ uv sync
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-No key handy? The app also reads `~/tokens/.anthropic_api_key` if `ANTHROPIC_API_KEY` isn't set.
+Store your Anthropic API key wherever you prefer (a password manager, a dotfile, a secrets file),
+then set it as the `ANTHROPIC_API_KEY` environment variable before running. For example, if the key
+lives in a file:
+
+```bash
+export ANTHROPIC_API_KEY="$(cat ~/path/to/your/anthropic_api_key)"
+```
 
 Run it:
 
