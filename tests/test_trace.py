@@ -69,4 +69,4 @@ def test_request_id_is_eight_hex_chars(tmp_path):
 def test_write_defaults_to_traces_dir_name():
     # No call to write() here, so nothing actually touches disk.
     tracer = Tracer("x")
-    assert str(tracer.trace_dir) == "traces"
+    assert tracer.trace_dir.name == "traces"

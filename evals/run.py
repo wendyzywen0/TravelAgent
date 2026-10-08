@@ -19,7 +19,7 @@ from trip_agent.models import TripResponse
 from evals.cases import CASES, EvalCase, load_tool_calls
 from evals.judge import judge as judge_fn
 
-RESULTS_DIR = Path("evals/results")
+RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -57,6 +57,13 @@ def _usage_cost(usage_records: list[dict[str, Any]]) -> tuple[int, int, float]:
     return tokens_in, tokens_out, cost
 
 
+def _ledger_total() -> float:
+    try:
+        return float(json.loads(ledger.LEDGER_PATH.read_text()).get("total_usd", 0.0))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return 0.0
+
+
 def run_case(case: EvalCase, run_judge: bool) -> dict[str, Any]:
     """Run one eval case end to end. Never raises - failures are recorded in the result dict."""
     result: dict[str, Any] = {
@@ -71,6 +78,7 @@ def run_case(case: EvalCase, run_judge: bool) -> dict[str, Any]:
         "fit": None,
         "trace_path": None,
         "usage": [],
+        "judge_usage": None,
         "error": None,
     }
 
@@ -114,6 +122,7 @@ def run_case(case: EvalCase, run_judge: bool) -> dict[str, Any]:
             result["fit_rationale"] = score.rationale
             if judge_usage:
                 result["usage"].append(judge_usage)
+                result["judge_usage"] = judge_usage
         except Exception as exc:
             result["fit_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -192,10 +201,16 @@ def main(argv: list[str] | None = None) -> int:
     all_usage = [u for r in results for u in r["usage"]]
     total_in, total_out, total_cost = _usage_cost(all_usage)
     print()
-    print(f"Total tokens: {total_in} in / {total_out} out")
-    print(f"Estimated cost: ${total_cost:.4f}")
+    print(f"Total tokens (agent + judge): {total_in} in / {total_out} out")
+    print(f"Estimated cost (agent + judge): ${total_cost:.4f}")
 
-    cumulative = ledger.record("eval", total_cost, total_in, total_out)
+    # suggest_trip already records each agent request in the ledger; only add the judge's spend here.
+    judge_usage = [r["judge_usage"] for r in results if r.get("judge_usage")]
+    if judge_usage:
+        j_in, j_out, j_cost = _usage_cost(judge_usage)
+        cumulative = ledger.record("eval-judge", j_cost, j_in, j_out)
+    else:
+        cumulative = _ledger_total()
     print(f"Project ledger total: ${cumulative:.4f}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)

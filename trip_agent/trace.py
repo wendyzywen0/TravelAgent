@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from trip_agent.config import PROJECT_ROOT
 
 from pydantic import BaseModel
 
@@ -36,7 +37,7 @@ def _json_safe(value: Any) -> Any:
 class Tracer:
     def __init__(self, raw_input: str, trace_dir: Path | None = None, verbose: bool = False) -> None:
         self.request_id: str = secrets.token_hex(4)  # 8 hex chars
-        self.trace_dir: Path = trace_dir if trace_dir is not None else Path("traces")
+        self.trace_dir: Path = trace_dir if trace_dir is not None else PROJECT_ROOT / "traces"
         self.verbose: bool = verbose
         self.raw_input: str = raw_input
         self.started_at: str = datetime.now(timezone.utc).isoformat()

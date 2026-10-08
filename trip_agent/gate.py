@@ -104,7 +104,8 @@ def gate(req: TripRequest) -> GateResult:
             missing.append("headcount")
         if r.nights is None:
             missing.append("trip length")
-        if r.budget_includes_flights and not r.has_flight_already and not r.origin_airport:
+        # Flights are only part of the budget when a TOTAL budget is given; a nightly cap alone is hotel-only.
+        if r.budget_total_usd is not None and r.budget_includes_flights and not r.has_flight_already and not r.origin_airport:
             missing.append("origin airport")
     return _result(list(dict.fromkeys(missing)), assumed, r)
 

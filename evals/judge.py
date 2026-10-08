@@ -44,14 +44,20 @@ class JudgeScore(BaseModel):
 
 
 def _compact_tool_results(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Only what the judge needs per call: name, args, result. Drops trace bookkeeping (t, duration_s)."""
-    compact = []
+    """Only what the judge needs per call: name, args, result, error. Drops trace bookkeeping (t, duration_s).
+
+    `error` is kept so failed calls (e.g. "no fare data for ...") are visible, not just a null result.
+    """
+    compact: list[dict[str, Any]] = []
     for call in tool_calls:
-        compact.append({
+        item: dict[str, Any] = {
             "name": call.get("name"),
             "args": call.get("args"),
             "result": call.get("result"),
-        })
+        }
+        if call.get("error"):
+            item["error"] = call.get("error")
+        compact.append(item)
     return compact
 
 

@@ -82,7 +82,8 @@ def read_trace(resp_path: str | None) -> dict[str, Any]:
 
 @pytest.fixture(autouse=True)
 def _isolate_ledger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(tmp_path)  # ledger.LEDGER_PATH is relative; keep fake runs out of the real ledger
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("trip_agent.ledger.LEDGER_PATH", tmp_path / "cost_ledger.json")  # keep fake runs out of the real ledger
 
 
 BEACH_FOR_TWO = TripRequest(

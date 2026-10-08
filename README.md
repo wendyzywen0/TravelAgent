@@ -50,13 +50,14 @@ output after a live run.
 {
   "status": "needs_info",
   "questions": [
-    "What kind of trip are you after, and when?",
+    "What kind of trip are you after, and when? For example, a beach week in February or a city break in Europe this spring.",
     "Roughly what's your budget in US dollars, and should it cover flights?",
-    "How many people are travelling?",
+    "How many people are travelling (adults, plus any children and their ages)?",
     "Which airport will you be flying from?"
   ],
   "suggestion": null,
-  "assumptions": []
+  "assumptions": [],
+  "trace_path": "traces/20261008T213159433177_7cba9f91.json"
 }
 ```
 (Input: `"Cheap."` — nothing to go on, so the agent asks everything at once instead of guessing.)
@@ -69,19 +70,63 @@ output after a live run.
   "suggestion": {
     "destinations": [
       {
-        "name": "Cancún",
+        "name": "Punta Cana",
+        "country": "Dominican Republic",
+        "why": "A warm, relaxing Caribbean beach escape that's ideal for a couple in February, with a beachfront mid-upper resort that keeps you comfortably under budget.",
+        "hotel": {
+          "name": "Punta Cana Breeze Resort",
+          "nightly_usd": 150.0,
+          "tags": [
+            "pool",
+            "mid-upper",
+            "beachfront",
+            "family"
+          ]
+        },
+        "flight_estimate_usd": 420.0,
+        "estimated_total_usd": 1890.0
+      },
+      {
+        "name": "Cancun",
         "country": "Mexico",
-        "why": "Warm beach destination in February, within budget from JFK.",
-        "hotel": { "name": "Casa Maya", "nightly_usd": 140, "tags": ["pool", "beachfront"] },
-        "flight_estimate_usd": 320,
-        "estimated_total_usd": 1620
+        "why": "Classic February beach relaxation with a short 4-hour flight from JFK and a beachfront mid-upper resort, fitting right at your budget.",
+        "hotel": {
+          "name": "Riviera Maya Sands Resort",
+          "nightly_usd": 175.0,
+          "tags": [
+            "pool",
+            "mid-upper",
+            "beachfront",
+            "family"
+          ]
+        },
+        "flight_estimate_usd": 380.0,
+        "estimated_total_usd": 1985.0
       }
     ],
-    "reasoning": "Both travelers fit under $2000 once flights and a mid-upper hotel are counted.",
-    "budget": { "total_usd": 1620, "user_budget_usd": 2000, "fits": true, "breakdown": {"flights": 640, "hotel": 980} },
-    "caveats": ["Estimate covers flights and hotel only; food and activities aren't included."]
+    "reasoning": "Both picks match your beach-and-relaxing vibe for a February couples trip and come in under the $2,000 budget including flights from JFK. Punta Cana is the top pick with the most budget margin ($1,890 total: $840 flights, $1,050 hotel). Cancun is a close second at $1,985. Both resorts are beachfront, mid-to-upper range, and have pools.",
+    "budget": {
+      "total_usd": 1890.0,
+      "user_budget_usd": 2000.0,
+      "fits": true,
+      "over_by_usd": 0.0,
+      "breakdown": {
+        "flights": 840.0,
+        "hotel": 1050.0
+      },
+      "includes_flights": true
+    },
+    "caveats": [
+      "Estimate covers flights and hotel only; food, activities, and ground transport are not included.",
+      "Assumed your budget includes flights.",
+      "Read 'nice hotel' as mid-to-upper range.",
+      "Hotel availability and exact rates vary; figures are estimates for February."
+    ]
   },
-  "assumptions": []
+  "assumptions": [
+    "Assumed your budget includes flights.",
+    "Read 'nice hotel' as mid-to-upper range."
+  ]
 }
 ```
 (Input: the beach-week example above — all the fields the agent needs were already in the request.)

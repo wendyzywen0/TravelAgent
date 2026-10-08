@@ -141,3 +141,10 @@ def test_input_not_mutated():
     req = beach(travelers_adults=None, couple_signal=True)
     gate(req)
     assert req.travelers_adults is None and req.hotel_style == "nice"
+
+
+def test_nightly_cap_alone_does_not_require_origin():
+    from trip_agent.models import TripRequest
+    from trip_agent.gate import gate
+    r = TripRequest(destination="Paris", hotel_nightly_cap_usd=300, travelers_adults=2, nights=3)
+    assert gate(r).ok

@@ -7,7 +7,9 @@ from pathlib import Path
 
 from trip_agent import config
 
-LEDGER_PATH = Path("cost_ledger.json")
+from trip_agent.config import PROJECT_ROOT
+
+LEDGER_PATH = PROJECT_ROOT / "cost_ledger.json"
 
 
 def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
@@ -15,8 +17,9 @@ def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> floa
     return (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
 
 
-def record(run_label: str, cost_usd: float, input_tokens: int, output_tokens: int, path: Path = LEDGER_PATH) -> float:
+def record(run_label: str, cost_usd: float, input_tokens: int, output_tokens: int, path: Path | None = None) -> float:
     """Append and return the new cumulative total."""
+    path = path or LEDGER_PATH
     if path.exists():
         data = json.loads(path.read_text())
     else:
@@ -38,8 +41,9 @@ def record(run_label: str, cost_usd: float, input_tokens: int, output_tokens: in
     return data["total_usd"]
 
 
-def check_cap(path: Path = LEDGER_PATH) -> None:
+def check_cap(path: Path | None = None) -> None:
     """Raise RuntimeError if cumulative spend >= PROJECT_COST_CAP_USD."""
+    path = path or LEDGER_PATH
     if not path.exists():
         return
     data = json.loads(path.read_text())
