@@ -1,6 +1,8 @@
 """suggest_trip end to end with a scripted fake client. No network, no key."""
 from __future__ import annotations
 
+import copy
+
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +12,8 @@ import pytest
 
 from trip_agent import config
 from trip_agent import prompts
-from trip_agent.agent import LOOP_CAP_QUESTION, build_tool_specs, suggest_trip
+from trip_agent import prompts
+from trip_agent.agent import build_tool_specs, suggest_trip
 from trip_agent.guards import GuardError
 from trip_agent.models import TripRequest
 
@@ -192,19 +195,53 @@ def test_beach_for_two_ok_and_grounded(tmp_path: Path) -> None:
     assert trace["totals"]["model_calls"] == 5  # 1 extraction + 4 loop turns
 
 
-def test_made_up_total_is_rejected(tmp_path: Path) -> None:
+def test_made_up_total_gets_one_repair_turn_then_graceful_needs_info(tmp_path: Path) -> None:
+    """A final_answer with an invented total is bounced back once; a second bad answer ends in customer wording."""
+    bad: dict[str, Any] = {}
+
     def script(step: int, messages: list[dict[str, Any]]) -> SimpleNamespace:
         if step < 4:
             return beach_script(step, messages)
-        out = beach_script(step, messages)
-        out.content[0].input["destinations"][0]["estimated_total_usd"] = 1234.0
-        return out
+        if step == 4:
+            out = beach_script(4, messages)
+            out.content[0].input["destinations"][0]["estimated_total_usd"] = 1234.0
+            bad["input"] = copy.deepcopy(out.content[0].input)
+            return out
+        return turn(tool_use("final-repair", "final_answer", copy.deepcopy(bad["input"])))  # still wrong
 
-    with pytest.raises(GuardError) as exc:
-        suggest_trip("Beach week for two in Feb under $2000 from JFK.", client=FakeClient(BEACH_FOR_TWO, script),
-                     trace_dir=tmp_path)
-    trace = read_trace(getattr(exc.value, "trace_path", None))
-    assert any(e["kind"] == "error" and e.get("reason") == "cross_check" for e in trace["events"])
+    client = FakeClient(BEACH_FOR_TWO, script)
+    resp = suggest_trip("Beach week for two in Feb under $2000 from JFK.", client=client, trace_dir=tmp_path)
+    assert resp.status == "needs_info"
+    assert resp.questions == [prompts.graceful_question("cross_check", [])]
+    assert prompts.GRACEFUL_NOTE in resp.assumptions
+    # the repair went back to the model as an error tool_result carrying the guard's reason
+    repair_msgs = [m for m in client.messages.create_calls[-1]["messages"] if m["role"] == "user"
+                   and isinstance(m["content"], list)
+                   and any(c.get("is_error") and "rejected" in str(c.get("content")) for c in m["content"])]
+    assert repair_msgs, "expected the rejected final_answer to be returned as an error tool_result"
+    trace = read_trace(resp.trace_path)
+    kinds = [(e["kind"], e.get("reason") or e.get("ok")) for e in trace["events"]]
+    assert ("cross_check", False) in kinds and ("error", "cross_check") in kinds and ("graceful", "cross_check") in kinds
+
+
+def test_made_up_total_repaired_on_second_try(tmp_path: Path) -> None:
+    good: dict[str, Any] = {}
+
+    def script(step: int, messages: list[dict[str, Any]]) -> SimpleNamespace:
+        if step < 4:
+            return beach_script(step, messages)
+        if step == 4:
+            out = beach_script(4, messages)
+            good["input"] = copy.deepcopy(out.content[0].input)
+            out.content[0].input["destinations"][0]["estimated_total_usd"] = 1234.0
+            return out
+        return turn(tool_use("final-repair", "final_answer", copy.deepcopy(good["input"])))  # grounded on repair
+
+    resp = suggest_trip("Beach week for two in Feb under $2000 from JFK.",
+                        client=FakeClient(BEACH_FOR_TWO, script), trace_dir=tmp_path)
+    assert resp.status == "ok" and resp.suggestion is not None
+    trace = read_trace(resp.trace_path)
+    assert [e.get("ok") for e in trace["events"] if e["kind"] == "cross_check"] == [False, True]
 
 
 # ---------- (c) never calls final_answer -> loop cap ----------
@@ -216,7 +253,7 @@ def test_loop_cap_returns_needs_info(tmp_path: Path) -> None:
     client = FakeClient(BEACH_FOR_TWO, forever)
     resp = suggest_trip("Beach week for two in Feb under $2000 from JFK.", client=client, trace_dir=tmp_path)
 
-    assert resp.status == "needs_info" and resp.questions == [LOOP_CAP_QUESTION]
+    assert resp.status == "needs_info" and resp.questions == [prompts.graceful_question("loop_cap", [])]
     assert len(client.messages.create_calls) == config.MAX_LOOP_TURNS
     assert any("stopped" in a for a in resp.assumptions)
     trace = read_trace(resp.trace_path)

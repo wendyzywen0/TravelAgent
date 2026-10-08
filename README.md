@@ -175,6 +175,28 @@ ledger stops new eval runs once the project passes $10 in total spend.
 request, the gate decision, every tool call (arguments, result, duration), every model call
 (model, tokens, duration), and the final response or error. The CLI prints the path at the end.
 
+### When the data runs out
+
+Mock data covers only the sample inputs, so some requests cannot be priced (for example a European
+beach week from JFK: the mock has no JFK fares to Puglia or Santorini). Three things keep that honest:
+
+1. The budget tool refuses a zero fare when flights are included, so a missing fare can never become
+   a $0 line. The model is told to price such a destination hotel-only, with the flight shown as unknown
+   and a caveat saying so.
+2. The final answer is cross-checked the moment it arrives. If a figure cannot be traced to a tool
+   result, the answer is sent back to the model once as an error with the exact reason, and it gets one
+   repair turn.
+3. If the repair also fails, or the loop runs out of turns, the response is a `needs_info` with
+   customer wording instead of a stack trace. Example:
+
+   > I could not put together a reliable estimate for this trip. I have no flight prices for JFK to
+   > Puglia, JFK to Santorini, so I could not price those options honestly. You could try a different
+   > departure airport, name a destination you have in mind, or ask again without a budget and I will
+   > suggest places without pricing.
+
+The trace records each step (`cross_check`, the repair tool_result, `graceful`) so a degraded answer
+can be reviewed afterwards.
+
 ## Evals
 
 Each of the six live cases is scored on three dimensions:

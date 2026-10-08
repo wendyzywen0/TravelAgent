@@ -85,6 +85,7 @@ round_trip_per_person_usd from estimate_flights (0 only when flights are exclude
 finish.
 
 final_answer fields:
+- If estimate_flights returns no data for a destination, never pass 0 as the fare. Either drop that destination, or price it hotel-only: call compute_budget with includes_flights=false, set its flight_estimate_usd to null, and add a caveat that the total excludes flights because no fare data was found.
 - If the request gives a total budget, every destination you return must have an estimated total at or under it. Mention near-misses only in caveats, never as destinations.
 - destinations[]: name and country from search_destinations (or the named place); why = one or two \
 sentences tied to the request; hotel = one find_hotels result (name, nightly_usd, tags copied exactly); \
@@ -111,3 +112,37 @@ def loop_user_message(req: TripRequest, assumptions: list[str]) -> str:
 
 NUDGE = "Call final_answer now."
 LAST_TURN = "Only one model turn is left. Call final_answer now with what the tools have returned so far."
+
+
+GRACEFUL_NOTE = "The planner stopped before it could back every price with data, so no prices are shown."
+
+
+def repair_message(problem: str) -> str:
+    """Sent back as the final_answer tool_result when the answer failed the price cross-check."""
+    return (
+        "Your final_answer was rejected because a figure could not be verified against tool results: "
+        f"{problem}\n"
+        "Fix it and call final_answer again. Rules: every hotel price, fare, and total must be copied from "
+        "a tool result. If a destination has no fare data, either drop it or price it hotel-only "
+        "(compute_budget with includes_flights=false, flight_estimate_usd null, and a caveat). Do not reuse "
+        "a compute_budget result whose inputs were not returned by find_hotels / estimate_flights."
+    )
+
+
+def graceful_question(reason: str, missing_fares: list[str]) -> str:
+    """Customer-facing wording when the loop could not produce a grounded answer."""
+    if reason == "cross_check":
+        if missing_fares:
+            routes = ", ".join(dict.fromkeys(missing_fares))
+            detail = f"I have no flight prices for {routes}, so I could not price those options honestly."
+        else:
+            detail = "Some of the prices I found did not add up, so I would rather not show numbers I cannot back up."
+        return (
+            f"I could not put together a reliable estimate for this trip. {detail} "
+            "You could try a different departure airport, name a destination you have in mind, "
+            "or ask again without a budget and I will suggest places without pricing."
+        )
+    return (
+        "I could not finish planning this one within my limits. Could you simplify the request, "
+        "for example one destination or fewer must-haves, and try again?"
+    )

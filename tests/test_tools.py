@@ -5,6 +5,7 @@ import pytest
 
 from trip_agent.mock_data import DESTINATIONS, FLIGHTS, HOTELS
 from trip_agent.tools import (
+
     TOOLS,
     BudgetResult,
     ComputeBudgetArgs,
@@ -20,6 +21,16 @@ from trip_agent.tools import (
 )
 
 
+def _ok_budget(args):
+    """compute_budget for the happy path: narrows away ToolError so attribute access type-checks."""
+    from trip_agent.tools import BudgetResult, ToolError, compute_budget
+    out = compute_budget(args)
+    assert not isinstance(out, ToolError), out
+    assert isinstance(out, BudgetResult)
+    return out
+
+
+
 def _names(**kwargs: object) -> list[str]:
     return [d.name for d in search_destinations(SearchDestinationsArgs.model_validate(kwargs))]
 
@@ -28,7 +39,7 @@ def _names(**kwargs: object) -> list[str]:
 
 def test_budget_fits_with_flights() -> None:
     # 2 x 420 flights = 840; 7 x 150 hotel = 1050; total 1890 <= 2000.
-    r = compute_budget(ComputeBudgetArgs(flight_per_person_usd=420, travelers=2, nightly_usd=150,
+    r = _ok_budget(ComputeBudgetArgs(flight_per_person_usd=420, travelers=2, nightly_usd=150,
                                          nights=7, user_budget_usd=2000))
     assert r == BudgetResult(total_usd=1890.0, breakdown={"flights": 840.0, "hotel": 1050.0},
                              fits=True, over_by_usd=0.0, includes_flights=True)
@@ -36,7 +47,7 @@ def test_budget_fits_with_flights() -> None:
 
 def test_budget_over_with_exact_over_by() -> None:
     # 2 x 480 = 960; 7 x 260 = 1820; total 2780; over 2000 by 780.
-    r = compute_budget(ComputeBudgetArgs(flight_per_person_usd=480, travelers=2, nightly_usd=260,
+    r = _ok_budget(ComputeBudgetArgs(flight_per_person_usd=480, travelers=2, nightly_usd=260,
                                          nights=7, user_budget_usd=2000))
     assert r.total_usd == 2780.0
     assert r.breakdown == {"flights": 960.0, "hotel": 1820.0}
@@ -46,7 +57,7 @@ def test_budget_over_with_exact_over_by() -> None:
 
 def test_budget_excluding_flights_has_no_flight_line() -> None:
     # Tokyo: 8 x 220 = 1760, flights excluded even though a fare is passed in.
-    r = compute_budget(ComputeBudgetArgs(flight_per_person_usd=980, travelers=2, nightly_usd=220,
+    r = _ok_budget(ComputeBudgetArgs(flight_per_person_usd=980, travelers=2, nightly_usd=220,
                                          nights=8, user_budget_usd=6000, includes_flights=False))
     assert "flights" not in r.breakdown
     assert r.breakdown == {"hotel": 1760.0}
@@ -57,7 +68,7 @@ def test_budget_excluding_flights_has_no_flight_line() -> None:
 
 
 def test_budget_without_user_budget_and_rounding() -> None:
-    r = compute_budget(ComputeBudgetArgs(flight_per_person_usd=333.335, travelers=3,
+    r = _ok_budget(ComputeBudgetArgs(flight_per_person_usd=333.335, travelers=3,
                                          nightly_usd=99.999, nights=3))
     assert r.breakdown == {"flights": 1000.0, "hotel": 300.0}
     assert r.total_usd == 1300.0
@@ -185,7 +196,7 @@ def test_two_jfk_beach_picks_fit_2000_for_two_for_seven_nights() -> None:
         pool_hotels = find_hotels(FindHotelsArgs(destination=d.name, must_haves=["pool"]))
         if not pool_hotels:
             continue
-        budget = compute_budget(ComputeBudgetArgs(
+        budget = _ok_budget(ComputeBudgetArgs(
             flight_per_person_usd=fare.round_trip_per_person_usd, travelers=2,
             nightly_usd=pool_hotels[0].nightly_usd, nights=7, user_budget_usd=2000))
         if budget.fits:
@@ -196,9 +207,9 @@ def test_two_jfk_beach_picks_fit_2000_for_two_for_seven_nights() -> None:
 def test_tokyo_eight_nights_fits_6000_but_luxury_does_not() -> None:
     hotels = find_hotels(FindHotelsArgs(destination="Tokyo"))
     nightly = {h.name: h.nightly_usd for h in hotels}
-    ok = compute_budget(ComputeBudgetArgs(travelers=2, nightly_usd=nightly["Shibuya Stream Hotel"], nights=8,
+    ok = _ok_budget(ComputeBudgetArgs(travelers=2, nightly_usd=nightly["Shibuya Stream Hotel"], nights=8,
                                           user_budget_usd=6000, includes_flights=False))
-    lux = compute_budget(ComputeBudgetArgs(travelers=2, nightly_usd=nightly["Marunouchi Imperial"], nights=8,
+    lux = _ok_budget(ComputeBudgetArgs(travelers=2, nightly_usd=nightly["Marunouchi Imperial"], nights=8,
                                            user_budget_usd=6000, includes_flights=False))
     assert ok.fits is True
     assert lux.fits is False and lux.over_by_usd == 800.0
@@ -206,3 +217,13 @@ def test_tokyo_eight_nights_fits_6000_but_luxury_does_not() -> None:
 
 def test_tools_mapping_intact() -> None:
     assert set(TOOLS) == {"search_destinations", "estimate_flights", "find_hotels", "compute_budget"}
+
+
+def test_compute_budget_refuses_zero_fare_when_flights_included():
+    from trip_agent.tools import ComputeBudgetArgs, ToolError, compute_budget
+    out = compute_budget(ComputeBudgetArgs(flight_per_person_usd=0.0, travelers=2, nightly_usd=240, nights=7,
+                                           user_budget_usd=2000, includes_flights=True))
+    assert isinstance(out, ToolError) and "includes_flights=false" in out.error
+    ok = compute_budget(ComputeBudgetArgs(flight_per_person_usd=0.0, travelers=2, nightly_usd=240, nights=7,
+                                          user_budget_usd=2000, includes_flights=False))
+    assert not isinstance(ok, ToolError) and ok.total_usd == 1680.0 and "flights" not in ok.breakdown

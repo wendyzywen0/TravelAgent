@@ -272,8 +272,12 @@ def find_hotels(args: FindHotelsArgs) -> list[Hotel]:
             for h in rows]
 
 
-def compute_budget(args: ComputeBudgetArgs) -> BudgetResult:
+def compute_budget(args: ComputeBudgetArgs) -> BudgetResult | ToolError:
     breakdown: dict[str, float] = {}
+    if args.includes_flights and args.flight_per_person_usd <= 0:
+        return ToolError(error="flight_per_person_usd must be a fare returned by estimate_flights when includes_flights is true. "
+                               "If estimate_flights returned no data for this destination, call compute_budget again with includes_flights=false "
+                               "for a hotel-only total, set that destination's flight_estimate_usd to null, and say so in caveats.")
     if args.includes_flights:
         breakdown["flights"] = round(args.flight_per_person_usd * args.travelers, 2)
     breakdown["hotel"] = round(args.nightly_usd * args.nights, 2)

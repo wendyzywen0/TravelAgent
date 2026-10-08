@@ -20,11 +20,6 @@ EXTRACTION_EFFORT = "low"
 LOOP_EFFORT = "medium"
 FINAL_TOOL = "final_answer"
 
-LOOP_CAP_QUESTION = (
-    "I couldn't finish planning this trip within my step limit. Could you simplify the request, "
-    "for example one destination or region, one budget figure, and your dates or number of nights?"
-)
-LOOP_CAP_CAVEAT = "The planner stopped before producing a grounded answer, so no prices are shown."
 
 TOOL_DESCRIPTIONS = {
     "search_destinations": "Find candidate destinations matching vibe keywords, season, and region, "
@@ -113,22 +108,10 @@ def _run(text: str, client: Any, tracer: Tracer) -> TripResponse:
     if not g.ok:
         return TripResponse(status="needs_info", questions=g.questions, assumptions=g.assumptions, request=gated)
 
-    suggestion = _tool_loop(gated, g.assumptions, client, tracer)
+    suggestion, reason = _tool_loop(gated, g.assumptions, client, tracer)
     if suggestion is None:
-        return TripResponse(
-            status="needs_info", questions=[LOOP_CAP_QUESTION],
-            assumptions=[*g.assumptions, LOOP_CAP_CAVEAT], request=gated,
-        )
-
-    resp = TripResponse(status="ok", suggestion=suggestion, assumptions=g.assumptions, request=gated)
-    try:
-        guards.cross_check(resp, tracer.tool_calls())
-    except guards.GuardError as exc:
-        tracer.event("error", reason="cross_check", message=str(exc))
-        raise
-    tracer.event("cross_check", ok=True)
-    return resp
-
+        return _graceful(reason or "loop_cap", g.assumptions, gated, tracer)
+    return TripResponse(status="ok", suggestion=suggestion, assumptions=g.assumptions, request=gated)
 
 def _extract(text: str, client: Any, tracer: Tracer) -> TripRequest:
     t0 = time.monotonic()
@@ -154,13 +137,24 @@ def _extract(text: str, client: Any, tracer: Tracer) -> TripRequest:
     return req
 
 
-def _tool_loop(req: TripRequest, assumptions: list[str], client: Any, tracer: Tracer) -> TripSuggestion | None:
-    """Bounded manual loop. Returns the parsed final answer, or None if the model never produced one."""
+def _tool_loop(
+    req: TripRequest, assumptions: list[str], client: Any, tracer: Tracer
+) -> tuple[TripSuggestion | None, str | None]:
+    """Bounded manual loop. Returns (final answer, None) or (None, failure_reason).
+
+    The final answer is cross-checked against tool results the moment it arrives. A failure goes
+    back to the model once as an error tool_result (one repair turn, granted beyond the cap);
+    a second failure ends the loop with reason "cross_check".
+    """
     specs = build_tool_specs()
     messages: list[dict[str, Any]] = [{"role": "user", "content": prompts.loop_user_message(req, assumptions)}]
     nudged = False
+    repaired = False
+    max_turns = config.MAX_LOOP_TURNS
+    turn = 0
 
-    for turn in range(1, config.MAX_LOOP_TURNS + 1):
+    while turn < max_turns:
+        turn += 1
         t0 = time.monotonic()
         msg = client.messages.create(
             model=config.MODEL,
@@ -176,15 +170,27 @@ def _tool_loop(req: TripRequest, assumptions: list[str], client: Any, tracer: Tr
                    {"tools": [t["name"] for t in specs]} if turn == 1 else None)
         messages.append({"role": "assistant", "content": msg.content})
 
-        if msg.stop_reason in ("max_tokens", "refusal"):
-            tracer.event("error", reason=msg.stop_reason, turn=turn)
-            raise AgentError(f"Tool loop stopped with stop_reason={msg.stop_reason} on turn {turn}.")
+        if msg.stop_reason == "refusal":
+            tracer.event("error", reason="refusal", turn=turn)
+            raise AgentError(f"Tool loop stopped with stop_reason=refusal on turn {turn}.")
+        if msg.stop_reason == "max_tokens":
+            tracer.event("error", reason="max_tokens", turn=turn)
+            return None, "max_tokens"
 
         if msg.stop_reason == "tool_use":
-            results, final = _dispatch(msg.content, tracer)
-            if final is not None:
-                return final
-            if turn == config.MAX_LOOP_TURNS - 1:
+            results, final, final_id = _dispatch(msg.content, tracer)
+            if final is not None and final_id is not None:
+                problem = _verify(final, req, tracer)
+                if problem is None:
+                    return final, None
+                if repaired:
+                    tracer.event("error", reason="cross_check", message=problem)
+                    return None, "cross_check"
+                repaired = True
+                max_turns += 1  # grant one repair turn even at the cap
+                results = [r for r in results if r.get("tool_use_id") != final_id]
+                results.append(_result(final_id, prompts.repair_message(problem), error=True))
+            if turn == max_turns - 1:
                 results.append({"type": "text", "text": prompts.LAST_TURN})
             messages.append({"role": "user", "content": results})
             continue
@@ -195,18 +201,45 @@ def _tool_loop(req: TripRequest, assumptions: list[str], client: Any, tracer: Tr
         # end_turn / stop_sequence without a final_answer call: nudge once, then give up.
         if nudged:
             tracer.event("error", reason="no_final_answer", turn=turn)
-            return None
+            return None, "no_final_answer"
         nudged = True
         messages.append({"role": "user", "content": prompts.NUDGE})
 
-    tracer.event("error", reason="loop_cap", turns=config.MAX_LOOP_TURNS)
+    tracer.event("error", reason="loop_cap", turns=max_turns)
+    return None, "loop_cap"
+
+
+def _verify(final: TripSuggestion, req: TripRequest, tracer: Tracer) -> str | None:
+    """Cross-check a candidate final answer. Returns the problem text, or None when grounded."""
+    try:
+        guards.cross_check(TripResponse(status="ok", suggestion=final, request=req), tracer.tool_calls())
+    except guards.GuardError as exc:
+        tracer.event("cross_check", ok=False, message=str(exc))
+        return str(exc)
+    tracer.event("cross_check", ok=True)
     return None
 
 
-def _dispatch(content: list[Any], tracer: Tracer) -> tuple[list[dict[str, Any]], TripSuggestion | None]:
+def _graceful(reason: str, assumptions: list[str], req: TripRequest, tracer: Tracer) -> TripResponse:
+    """Customer-facing fallback when the loop could not produce a grounded answer."""
+    missing_fares = []
+    for call in tracer.tool_calls():
+        err = call.get("error") or ""
+        if call.get("name") == "estimate_flights" and "no fare data" in err:
+            args = call.get("args") or {}
+            missing_fares.append(f"{args.get('origin', '?')} to {args.get('destination', '?')}")
+    question = prompts.graceful_question(reason, missing_fares)
+    tracer.event("graceful", reason=reason, missing_fares=missing_fares)
+    return TripResponse(
+        status="needs_info", questions=[question],
+        assumptions=[*assumptions, prompts.GRACEFUL_NOTE], request=req,
+    )
+
+def _dispatch(content: list[Any], tracer: Tracer) -> tuple[list[dict[str, Any]], TripSuggestion | None, str | None]:
     """Run every tool_use block in a turn. Returns all tool_results (for one user message) and the final answer."""
     results: list[dict[str, Any]] = []
     final: TripSuggestion | None = None
+    final_id: str | None = None
     for block in content:
         if getattr(block, "type", None) != "tool_use":
             continue
@@ -214,6 +247,7 @@ def _dispatch(content: list[Any], tracer: Tracer) -> tuple[list[dict[str, Any]],
         if block.name == FINAL_TOOL:
             try:
                 final = TripSuggestion.model_validate(args)
+                final_id = block.id
                 tracer.event("final_answer", ok=True)
                 results.append(_result(block.id, "Received."))
             except ValidationError as exc:
@@ -221,7 +255,7 @@ def _dispatch(content: list[Any], tracer: Tracer) -> tuple[list[dict[str, Any]],
                 results.append(_result(block.id, f"Invalid final_answer: {exc}", error=True))
             continue
         results.append(_run_tool(block.id, block.name, args, tracer))
-    return results, final
+    return results, final, final_id
 
 
 def _run_tool(tool_use_id: str, name: str, args: dict[str, Any], tracer: Tracer) -> dict[str, Any]:
