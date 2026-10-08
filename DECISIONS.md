@@ -68,3 +68,9 @@ Optional, only after verification:
 - Wider mock data
 
 Time plan: ~55 min build, ~10 min live demo + eval run, last 25 min verification. If the eval run is slow, drop to five cases rather than cut verification.
+
+## D8. Follow-ups from the spec review
+- Total token spend for the whole project stays under $10. Eval runner prints usage and cost.
+- "Long weekend" ⇒ 3 nights, "spring break" ⇒ 7 nights, assumed with a caveat.
+- Headcount inference: "I'll be" / "I'm" ⇒ 1 adult; "we" / "anniversary" / "couple" ⇒ 2 adults. Always with a caveat.
+- Still open: default daily spend for the budget tool (see SPEC.md §8 Q2).

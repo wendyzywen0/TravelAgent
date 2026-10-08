@@ -116,7 +116,9 @@ TripResponse(status="ok", suggestion=TripSuggestion)
 
 Rules:
 - All missing critical fields are asked at once, in one response.
-- "Anniversary" / "couple" / "honeymoon" ⇒ infer 2 adults with a caveat.
+- "Anniversary" / "couple" / "honeymoon" / "we" ⇒ infer 2 adults with a caveat.
+- First-person singular ("I'll be in Lisbon", "I'm going") with no other headcount signal ⇒ infer 1 adult with a caveat.
+- "Long weekend" ⇒ 3 nights; "spring break" ⇒ 7 nights. Both assumed with a caveat, not asked.
 - Budget planning is in play whenever the user gives a dollar figure or cap.
 - `budget_includes_flights` defaults to true unless the user says "excluding flights" or already has the flight.
 
@@ -128,7 +130,7 @@ Expected outcome on the seven sample inputs:
 | Long weekend Europe, SFO, boutique <$300/night | ok | headcount assumed 2 |
 | Family of 4, spring break, ~$5k all-in, pool | needs_info | no origin, budget includes flights |
 | Anniversary May, not Santorini, flag past $4k | needs_info | no origin; headcount inferred 2 |
-| Lisbon Oct 10–13 + 5 days nearby, flight booked | ok | flights excluded; headcount assumed |
+| Lisbon Oct 10–13 + 5 days nearby, flight booked | ok | flights excluded; "I'll be" ⇒ 1 adult inferred |
 | Tokyo 8 days Nov, 2 adults, $6k excl. flights | ok | all fields present |
 | "Cheap." | needs_info | nothing known |
 
@@ -159,6 +161,7 @@ Expected outcome on the seven sample inputs:
 - Every `estimated_total_usd` shown must equal a `compute_budget` result (checked in Python before returning).
 - No network calls except the Anthropic API. No randomness in mocks.
 - `tests/` must run in under 5 seconds with no key set.
+- Total token spend for the whole project (building, demo, evals, optional sweep) stays under $10. The eval runner prints token usage and estimated cost per run.
 - README setup path: clone → `uv sync` → set key → one command to run, one to test, one to eval.
 
 ## 7. Acceptance criteria (testable)
@@ -193,9 +196,9 @@ Each case is scored on Structure (pass/fail), Behavior (per-check pass/fail), Fi
 ## 8. Unresolved questions (flagged, not answered)
 
 1. **Loop-cap fallback.** If the model hits 6 turns without a final answer, return partial `ok` with caveats or `needs_info`? Proposal in 6 is a placeholder.
-2. **Default daily spend.** `compute_budget` needs a per-person daily spend for food/activities. A flat default (e.g. $100/day) is an invented number; should it be a tool input the model sets from price_level instead?
-3. **"Long weekend" and "spring break" lengths.** Treat as 3 nights and 7 nights? Or ask? Today they'd be assumed with a caveat.
-4. **Headcount for the Lisbon case.** The sample gives no headcount and asks for accommodation; by the D3 table that would ask, but D7 expects `ok`. Decide: assume 1 adult (solo wedding guest), or ask.
+2. **Default daily spend.** Still open. `compute_budget` needs a per-person daily spend for food/activities. A flat default (e.g. $100/day) is an invented number. Proposed default if not decided: the destination mock carries a `typical_daily_spend_usd` per price level, and the model passes it through to `compute_budget`, so the number is traceable to mock data rather than made up.
+3. ~~"Long weekend" and "spring break" lengths.~~ Resolved: 3 nights and 7 nights, assumed with a caveat.
+4. ~~Headcount for the Lisbon case.~~ Resolved: "I'll be in Lisbon" signals one person ⇒ infer 1 adult with a caveat.
 5. **Judge effort and prompt wording.** Low effort was agreed; the rubric text itself is not yet written.
 6. **Structured-output mechanism.** `output_config.format` vs a single `strict` tool for the final answer. Implementation detail, but it affects how tool calls and the final answer coexist in call 2.
-7. **Eval cost ceiling.** No dollar cap set per eval run. Six cases × up to 7 calls on Opus 4.8 is small but not zero.
+7. ~~Eval cost ceiling.~~ Resolved: under $10 total for the whole project. Runner reports usage per run.
