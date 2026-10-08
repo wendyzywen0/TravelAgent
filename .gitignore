@@ -1,0 +1,28 @@
+# secrets
+.env
+.env.*
+*.key
+*_api_key*
+tokens/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+uv.lock.bak
+
+# eval outputs / scratch
+evals/results/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
