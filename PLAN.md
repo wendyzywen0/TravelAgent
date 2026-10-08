@@ -90,3 +90,24 @@ Each agent runs only its own test files. The lead runs the full suite after merg
 | Eval run is slow or expensive | Drop to five cases (remove case 4), keep verification time |
 | Opus 4.8 is slow per call during demo | Lower effort to `low` for extraction, keep `medium` for the loop |
 | An agent wanders outside its files | Lead reverts those files from the last commit and reassigns |
+
+## 6. Tickets (vertical slices) and how they map to the waves
+
+The waves above are a horizontal cut by layer, chosen for parallelism. The GitHub tickets are
+vertical slices, each demoable on its own. Parent issue #1 holds the spec; #2–#10 are sub-issues
+with native blocked-by edges.
+
+| Ticket | Slice | Blocked by | Maps to |
+|---|---|---|---|
+| #2 | "Cheap." end to end: scaffold, models, gate, extraction, trace, CLI | — | T0 + T1 + trace half of T3 + thin T4/T5 |
+| #3 | Beach-for-two end to end: four tools, bounded loop, price cross-check | #2 | T2 + guards half of T3 + full T4 |
+| #4 | Eval harness: three dimensions, judge, report, cost ledger | #3 | T6a + T6b |
+| #5 | Ask for headcount and origin (eval case 2) | #4 | gate rules, fan-out |
+| #6 | Europe long weekend from SFO, nightly cap (eval case 4) | #4 | mock data + fan-out |
+| #7 | Lisbon add-on, skip flights, solo inference (eval case 5) | #4 | mock data + fan-out |
+| #8 | Tokyo excluding flights, exclusions honored (eval case 6) | #4 | mock data + fan-out |
+| #9 | Guardrails: input limits, off-topic, injection, loop-cap fallback | #3 | rest of T3 |
+| #10 | README and fresh-clone walkthrough | #4, #9 | T7 |
+
+Frontier after #4 lands: #5, #6, #7, #8, #9 can all run in parallel. #6, #7, #8 each touch mock
+data, so the agents working them must add rows, never rewrite the table.
