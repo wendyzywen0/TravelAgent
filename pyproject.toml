@@ -1,0 +1,17 @@
+[project]
+name = "trip-agent"
+version = "0.1.0"
+description = "Single-turn Trip Idea agent: natural-language request in, typed suggestion out."
+requires-python = ">=3.12"
+dependencies = ["anthropic>=0.70", "pydantic>=2.9"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pyright>=1.1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.pyright]
+include = ["trip_agent", "evals", "tests"]
+typeCheckingMode = "basic"
