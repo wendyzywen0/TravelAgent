@@ -79,3 +79,7 @@ Time plan: ~55 min build, ~10 min live demo + eval run, last 25 min verification
 - Budget = flights + accommodation only. Food, activities, ground transport excluded from the initial scope and stated in a caveat. `compute_budget` has no daily-spend input.
 - Basic guardrails in Python: input length check, user text kept out of the system prompt, 6-turn loop cap, pydantic validation of tool arguments, every dollar figure in the response re-checked against tool results, off-topic requests get `needs_info`, cost ledger with a $10 project cap.
 - Tracing: one JSON trace per request under `traces/` (git-ignored) with input, extraction, gate decision, tool calls, model usage, and final output. CLI prints the trace path; eval report links each case to its trace.
+
+## D10. Build plan
+- Tasks, dependencies and parallel-agent dispatch are in `PLAN.md`: one lead on the critical path, four agents in wave 1 (models+gate, tools+data, tracing+guards, eval cases), two alongside in wave 2 (eval runner+judge, README).
+- Agents own disjoint files and share stub signatures written in T0. Contract changes go through the lead.

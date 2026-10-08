@@ -1,6 +1,6 @@
 # TravelAgent — Specification
 
-Status: agreed design, not yet implemented. Decisions trace to `DECISIONS.md` (D1–D7).
+Status: agreed design, not yet implemented. Decisions trace to `DECISIONS.md` (D1–D9). Build order and agent dispatch are in `PLAN.md`.
 Date: 2026-10-08. Budget: a focused 2 hours including evaluation and submission.
 
 ## 1. Problem
