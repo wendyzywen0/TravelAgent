@@ -173,7 +173,7 @@ Expected outcome on the seven sample inputs:
 ## 6. Constraints
 
 - Python 3.12+ (machine has 3.14), `uv` for setup, `anthropic` + `pydantic` only runtime deps.
-- API key read from `ANTHROPIC_API_KEY`, falling back to `~/tokens/.anthropic_api_key`. Never committed.
+- API key read from the `ANTHROPIC_API_KEY` environment variable only. Never committed.
 - Tool loop hard cap: 6 model turns. On cap, return `ok` with whatever is grounded plus a caveat, or `needs_info` if nothing is.
 - Every `estimated_total_usd` shown must equal a `compute_budget` result (checked in Python before returning).
 - No network calls except the Anthropic API. No randomness in mocks.
