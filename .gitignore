@@ -29,3 +29,9 @@ cost_ledger.json
 .idea/
 .vscode/
 *Loop Review.html
+PROCESS.md
+
+# session exports / personal notes never go in the repo
+docs/session-transcript/
+docs/*.zip
+*.zip
