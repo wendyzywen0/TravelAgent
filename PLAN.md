@@ -111,3 +111,128 @@ with native blocked-by edges.
 
 Frontier after #4 lands: #5, #6, #7, #8, #9 can all run in parallel. #6, #7, #8 each touch mock
 data, so the agents working them must add rows, never rewrite the table.
+
+---
+
+# Phase 2 — web interface with clarification rounds
+
+Decisions: `DECISIONS.md` W1–W4. The agent stays single-turn; the web layer owns the rounds.
+
+## 1. Shape
+
+```
+browser (one static page)  ──HTTP/JSON──▶  FastAPI server  ──in-process──▶  suggest_trip(merged_text)
+                                               │
+                                               ├─ session store: dict + web_sessions/<id>.json
+                                               └─ background thread per run, polled by the page
+```
+
+One run = build the merged text from the session, call the agent, store the `TripResponse`.
+If the response is `needs_info`, the page shows one box per question plus "anything else";
+the answers become the next round and the whole history is re-sent.
+
+## 2. Merged text (W1, W4)
+
+```
+Original request:
+<text as typed>
+
+Clarifications (later answers override earlier statements if they conflict):
+Round 1
+Q: How many people are travelling (adults, plus any children and their ages)?
+A: Two adults
+Anything else: we'd like a pool
+
+Round 2
+Q: Which airport will you be flying from?
+A: JFK
+```
+
+Rules: empty answers are omitted; rounds are numbered in order; the full question text is kept so
+the agent sees what was asked; the result must stay under the agent's 2,000-char limit or the
+server returns 400 before calling the agent.
+
+## 3. API contract
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| `POST` | `/api/sessions` | `{"text": str}` | `{"session_id"}`; starts run 1 |
+| `GET` | `/api/sessions/{id}` | — | full session state (below) |
+| `POST` | `/api/sessions/{id}/answers` | `{"answers": [{"question": str, "answer": str}], "extra": str}` | `202` and starts the next run; `409` if a run is in flight or the round cap is reached; `400` if the merged text is too long |
+| `GET` | `/api/sessions/{id}/trace` | — | the latest run's trace JSON |
+| `DELETE` | `/api/sessions/{id}` | — | removes the session and its file |
+| `GET` | `/` | — | the page |
+
+Session state:
+
+```json
+{
+  "session_id": "…",
+  "original_text": "…",
+  "rounds": [{"answers": [{"question": "…", "answer": "…"}], "extra": "…"}],
+  "merged_text": "…",
+  "status": "running" | "done" | "error",
+  "response": <TripResponse> | null,
+  "error": str | null,
+  "trace_path": str | null,
+  "run_count": 2,
+  "rounds_left": 1,
+  "started_at": "…", "finished_at": "…"
+}
+```
+
+## 4. Files
+
+| File | Purpose |
+|---|---|
+| `web/__init__.py` | package |
+| `web/merge.py` | pure function `merge(original, rounds) -> str`; the only place the prompt shape lives |
+| `web/store.py` | `Session` dataclass, in-memory dict, JSON load/save under `web_sessions/`, id generation |
+| `web/app.py` | FastAPI routes, background run thread, timeout, round cap, error mapping |
+| `web/__main__.py` | `uv run python -m web` → uvicorn on 127.0.0.1:8000 |
+| `web/static/index.html` | the page: request box, status with elapsed time, rounds history, question form, result cards, trace link, start over |
+| `tests/test_merge.py` | merge shape, empty answers dropped, ordering, length check |
+| `tests/test_web.py` | TestClient with `web.app.suggest_trip` monkeypatched: needs_info → answers → ok; round cap → 409; too long → 400; concurrent run → 409; trace endpoint |
+| `pyproject.toml` | `web` dependency group (fastapi, uvicorn, httpx for TestClient) in `default-groups` |
+| `README.md` | "Web UI" section: one command, what the page does, the round cap |
+| `.gitignore` | `web_sessions/` |
+
+No change to `trip_agent/` is expected. If one is needed, it is a contract change and goes through the lead.
+
+## 5. Tasks and dependencies
+
+| ID | Task | Depends on | Owner |
+|---|---|---|---|
+| P0 | Add `web` dependency group, `web/` skeleton, `.gitignore`, the API contract as stubs | — | lead |
+| P1 | `merge.py` + `tests/test_merge.py` | P0 | agent |
+| P2 | `store.py` + `app.py` + `tests/test_web.py` (fake agent) | P0, P1 | lead |
+| P3 | `index.html` against the API contract | P0 (contract only) | agent, parallel with P1/P2 |
+| P4 | Live end-to-end in the browser: "beach week, no headcount" → answer "two" → `ok`; "Cheap." → 4 questions → answers → `ok` | P2, P3 | lead |
+| P5 | README web section; eval case 7 (two-round) optional | P4 | agent |
+
+```
+P0 ──┬── P1 ── P2 ──┐
+     └── P3 ────────┴── P4 ── P5
+```
+
+Estimated effort: about 90 minutes of build with two agents in parallel, plus two live runs
+(about $0.40).
+
+## 6. Tests that must pass before commit
+
+- Merge: given original + two rounds, the text has the exact shape in §2; empty answers are
+  dropped; a merged text over 2,000 chars is rejected with a clear message.
+- Server (fake agent): create → `running` → `done` with `needs_info`; post answers → merged text
+  contains the Q/A lines → `done` with `ok`; third round after cap → `409`; post while running →
+  `409`; unknown id → `404`; delete removes the file.
+- Existing 107 tests unchanged.
+
+## 7. Ambiguities to discuss (recorded in DECISIONS.md W4)
+
+1. Session expiry and listing: none planned.
+2. Round cap value (3) and what happens at the cap: stop and offer "start over" vs the agent's graceful wording.
+3. Progress: polling vs streaming trace events.
+4. Timeout (120 s) with no kill switch; see #15.
+5. Whether the 2,000-char input limit should be higher for web use.
+6. Whether the page should let the user edit the original request, not just append rounds.
+7. Whether a two-round case belongs in the eval suite.

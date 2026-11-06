@@ -83,3 +83,33 @@ Time plan: ~55 min build, ~10 min live demo + eval run, last 25 min verification
 ## D10. Build plan
 - Tasks, dependencies and parallel-agent dispatch are in `PLAN.md`: one lead on the critical path, four agents in wave 1 (models+gate, tools+data, tracing+guards, eval cases), two alongside in wave 2 (eval runner+judge, README).
 - Agents own disjoint files and share stub signatures written in T0. Contract changes go through the lead.
+
+---
+
+# Phase 2 — web interface (started 2026-11-06)
+
+## W1. Clarification rounds merge by text concatenation
+- The web layer owns the multi-turn state. The agent stays single-turn.
+- Each re-run sends ONE text to the agent: the original request, then every clarification round so far as question/answer pairs, in order.
+- The prompt text states that later answers override earlier statements when they conflict.
+- No change to the agent's extraction, gate, or loop. The extractor does the merging.
+
+## W2. Python web server (FastAPI) calling the agent in-process
+- Server is Python so it can import `suggest_trip` directly: one toolchain, one `uv sync`, shared ledger, traces, and fake-model tests. Page is one plain HTML file with vanilla JS served by the same process; no build step.
+- The CLI stays as the terminal wrapper. A run timeout is enforced in the server.
+- Follow-up (not now): run the CLI as a subprocess for a hard kill switch, crash isolation, and a narrower environment for the API key. If done: argument list only, never a shell string; pass user text on stdin; keep in mind it does not help against prompt injection, which lives at the model boundary.
+
+## W3. Answer form: one text box per question, plus "anything else"
+- The page renders each returned question with its own input and one optional free-text box.
+- Server stores rounds as ordered question/answer pairs plus the extra text. Empty answers are dropped.
+
+## W4. Judgment calls made to proceed (open for discussion)
+- **State:** in-memory dict keyed by a random session id, with a JSON copy per session under `web_sessions/` (git-ignored) so a server restart does not lose a session. No expiry; manual delete. Ambiguity: whether sessions should expire or be listable.
+- **Round cap:** 3 clarification rounds. After that the page stops asking and offers "start over". Ambiguity: cap value, and whether the cap should trigger the agent's graceful wording instead.
+- **Progress:** the run happens in a background thread; the page polls every 1.5 s and shows elapsed time. No streaming. Ambiguity: whether to stream trace events live.
+- **Timeout:** 120 s per run; on expiry the session shows the agent's graceful "could not finish" wording. The thread is not killed (see #15 for the subprocess kill switch).
+- **Input limit:** the merged text (original + all rounds) must stay under the agent's 2,000-character limit; the server returns a clear 400 when it would not. Ambiguity: raise the limit for web use.
+- **Binding:** 127.0.0.1:8000 only, no auth (per the brief). The $10 ledger cap still applies.
+- **Merged prompt shape:** "Original request:" block, then "Clarifications (later answers override earlier statements if they conflict):" with Round N / Q / A lines, then "Anything else:" lines. Each round's full question text is included so the agent sees what was asked.
+- **Tests:** FastAPI TestClient with the agent function monkeypatched; no network. One live end-to-end check in the browser before commit.
+- **Stack:** FastAPI + uvicorn added as a `web` dependency group that `uv sync` installs by default. Page is one static HTML file, no build step.

@@ -35,3 +35,4 @@ PROCESS.md
 docs/session-transcript/
 docs/*.zip
 *.zip
+web_sessions/
